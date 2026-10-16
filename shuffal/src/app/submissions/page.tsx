@@ -12,6 +12,13 @@ type Submission = {
   language: string;
   verdict: string;
   failed_test_case: number | null;
+  passed_test_cases: number | null;
+  total_test_cases: number | null;
+  execution_time: number | null;
+  memory_kb: number | null;
+  session_started_at: string | null;
+  session_ended_at: string | null;
+  time_taken_seconds: number | null;
   created_at: string;
 };
 
@@ -22,6 +29,17 @@ function formatSubmittedAt(value: string) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(date);
+}
+
+function formatDuration(seconds: number) {
+  const hours = Math.floor(seconds / 3_600);
+  const minutes = Math.floor((seconds % 3_600) / 60);
+  const remainingSeconds = seconds % 60;
+  return hours > 0
+    ? `${hours}h ${minutes}m ${remainingSeconds}s`
+    : minutes > 0
+      ? `${minutes}m ${remainingSeconds}s`
+      : `${remainingSeconds}s`;
 }
 
 export default function SubmissionsPage() {
@@ -80,7 +98,25 @@ export default function SubmissionsPage() {
                 </span>
                 <Link href={`/problems/${submission.problem_slug}`}>{submission.problem_title}</Link>
                 <span>{submission.language}</span>
-                <time dateTime={submission.created_at}>{formatSubmittedAt(submission.created_at)}</time>
+                <div>
+                  <time dateTime={submission.created_at}>{formatSubmittedAt(submission.created_at)}</time>
+                  {(submission.passed_test_cases !== null || submission.execution_time !== null || submission.memory_kb !== null) && (
+                    <small className="block text-slate-400">
+                      {submission.passed_test_cases !== null && submission.total_test_cases !== null
+                        ? `${submission.passed_test_cases}/${submission.total_test_cases} tests`
+                        : ""}
+                      {submission.execution_time !== null ? ` · ${submission.execution_time}s` : ""}
+                      {submission.memory_kb !== null ? ` · ${submission.memory_kb} KB` : ""}
+                    </small>
+                  )}
+                  {submission.time_taken_seconds !== null && (
+                    <small className="block text-slate-400">
+                      Session {submission.session_started_at ? formatSubmittedAt(submission.session_started_at) : "start unavailable"}
+                      {submission.session_ended_at ? ` – ${formatSubmittedAt(submission.session_ended_at)}` : ""}
+                      {" · "}{formatDuration(submission.time_taken_seconds)}
+                    </small>
+                  )}
+                </div>
               </div>
             ))}
           </div>

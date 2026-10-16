@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, BookPlus, FileJson2, Plus, Trash2 } from "lucide-react";
 import { z } from "zod";
@@ -10,6 +10,7 @@ import { problems as builtInProblems, type Problem } from "@/lib/data";
 const testCaseSchema = z.object({
   input: z.string().max(10_000),
   expected: z.string().max(10_000),
+  is_public: z.boolean().default(false),
 });
 
 const questionSchema = z.object({
@@ -24,6 +25,10 @@ const questionSchema = z.object({
   sample_input: z.string().max(10_000),
   sample_output: z.string().max(10_000),
   starter_code: z.string().max(30_000).default(""),
+  supported_languages: z.array(z.number().int().positive()).max(40).default([]),
+  starter_codes: z.record(z.string(), z.string().max(30_000)).default({}),
+  time_limit_ms: z.number().int().min(100).max(30_000).default(2_000),
+  memory_limit_mb: z.number().int().min(16).max(1_024).default(256),
   test_cases: z.array(testCaseSchema).min(1).max(25),
 });
 
@@ -32,6 +37,21 @@ type Question = z.infer<typeof questionSchema>;
 type TestCase = z.infer<typeof testCaseSchema>;
 type FormQuestion = Omit<Question, "tags"> & { tags: string };
 type ImportState = { questions: Question[]; errors: string[] };
+type JudgeLanguage = { id: number; name: string };
+type ManagedProblem = Problem & {
+  testCases: TestCase[];
+  publicationStatus: "published" | "archived";
+  timeLimitMs: number;
+  memoryLimitMb: number;
+  supportedLanguages: number[];
+  starterCodes: Record<string, string>;
+};
+type ProblemDraft = {
+  draft_id: string;
+  problem_id: string | null;
+  title: string;
+  draft_data: Record<string, unknown>;
+};
 
 const emptyForm: FormQuestion = {
   title: "",
@@ -45,7 +65,11 @@ const emptyForm: FormQuestion = {
   sample_input: "",
   sample_output: "",
   starter_code: "",
-  test_cases: [{ input: "", expected: "" }],
+  supported_languages: [],
+  starter_codes: {},
+  time_limit_ms: 2_000,
+  memory_limit_mb: 256,
+  test_cases: [{ input: "", expected: "", is_public: false }],
 };
 
 const questionTemplate = {
@@ -61,9 +85,13 @@ const questionTemplate = {
     sample_input: "2 3",
     sample_output: "5",
     starter_code: "a, b = map(int, input().split())\nprint(a + b)",
+    supported_languages: [],
+    starter_codes: {},
+    time_limit_ms: 2_000,
+    memory_limit_mb: 256,
     test_cases: [
-      { input: "2 3", expected: "5" },
-      { input: "-4 9", expected: "5" },
+      { input: "2 3", expected: "5", is_public: true },
+      { input: "-4 9", expected: "5", is_public: false },
     ],
   }],
 };
@@ -130,6 +158,31 @@ export function AdminProblems() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [languages, setLanguages] = useState<JudgeLanguage[]>([]);
+  const [managedProblems, setManagedProblems] = useState<ManagedProblem[]>([]);
+  const [drafts, setDrafts] = useState<ProblemDraft[]>([]);
+  const [activeDraftId, setActiveDraftId] = useState<string | null>(null);
+  const [editingProblemId, setEditingProblemId] = useState<string | null>(null);
+
+  async function refreshManageData() {
+    const managed = await apiRequest<{ problems: ManagedProblem[]; drafts: ProblemDraft[] }>("/api/problems/manage");
+    setManagedProblems(managed.problems);
+    setDrafts(managed.drafts);
+    try {
+      const languageResult = await apiRequest<{ languages: JudgeLanguage[] }>("/api/judge/languages");
+      setLanguages(languageResult.languages);
+    } catch (cause) {
+      setError(cause instanceof Error
+        ? `Questions loaded, but Judge0 languages could not be loaded: ${cause.message}`
+        : "Questions loaded, but Judge0 languages could not be loaded.");
+    }
+  }
+
+  useEffect(() => {
+    void Promise.resolve().then(refreshManageData).catch((cause: unknown) => {
+      setError(cause instanceof Error ? cause.message : "Could not load the problem manager.");
+    });
+  }, []);
 
   function updateForm<K extends keyof FormQuestion>(key: K, value: FormQuestion[K]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -137,7 +190,7 @@ export function AdminProblems() {
     setError("");
   }
 
-  function updateTestCase(index: number, key: keyof TestCase, value: string) {
+  function updateTestCase(index: number, key: keyof TestCase, value: string | boolean) {
     setForm((current) => ({
       ...current,
       test_cases: current.test_cases.map((testCase, caseIndex) =>
@@ -146,6 +199,83 @@ export function AdminProblems() {
     }));
     setStepErrors([]);
     setError("");
+  }
+
+  function editProblem(problem: ManagedProblem) {
+    setForm({
+      title: problem.title,
+      difficulty: problem.difficulty,
+      topic: problem.topic ?? "",
+      tags: problem.tags.join(", "),
+      description: problem.description ?? "",
+      input_format: problem.inputFormat ?? "",
+      output_format: problem.outputFormat ?? "",
+      constraints: problem.constraints ?? "",
+      sample_input: problem.sampleInput ?? "",
+      sample_output: problem.sampleOutput ?? "",
+      starter_code: problem.starterCode ?? "",
+      supported_languages: problem.supportedLanguages,
+      starter_codes: problem.starterCodes,
+      time_limit_ms: problem.timeLimitMs,
+      memory_limit_mb: problem.memoryLimitMb,
+      test_cases: problem.testCases.map(({ input, expected, is_public }) => ({
+        input: String(input ?? ""),
+        expected: String(expected ?? ""),
+        is_public: is_public === true,
+      })),
+    });
+    setEditingProblemId(problem.id);
+    setActiveDraftId(null);
+    setStep(0);
+    setMode("single");
+    setError("");
+    setSuccess(`Editing ${problem.title}. Save a draft or publish when ready.`);
+  }
+
+  function editDraft(draft: ProblemDraft) {
+    const data = draft.draft_data;
+    const draftString = (key: string) => typeof data[key] === "string" ? data[key] as string : "";
+    const draftNumber = (key: string, fallback: number) =>
+      typeof data[key] === "number" && Number.isFinite(data[key]) ? data[key] as number : fallback;
+    const draftStringRecord = data.starter_codes && typeof data.starter_codes === "object" && !Array.isArray(data.starter_codes)
+      ? Object.fromEntries(Object.entries(data.starter_codes).filter((entry): entry is [string, string] => typeof entry[1] === "string"))
+      : {};
+    setForm({
+      ...emptyForm,
+      title: draftString("title"),
+      difficulty: data.difficulty === "Medium" || data.difficulty === "Hard" ? data.difficulty : "Easy",
+      topic: draftString("topic"),
+      tags: Array.isArray(data.tags) ? data.tags.filter((tag): tag is string => typeof tag === "string").join(", ") : "",
+      description: draftString("description"),
+      input_format: draftString("input_format"),
+      output_format: draftString("output_format"),
+      constraints: draftString("constraints"),
+      sample_input: draftString("sample_input"),
+      sample_output: draftString("sample_output"),
+      starter_code: draftString("starter_code"),
+      supported_languages: Array.isArray(data.supported_languages)
+        ? data.supported_languages.filter((id): id is number => typeof id === "number" && Number.isInteger(id) && id > 0)
+        : [],
+      starter_codes: draftStringRecord,
+      time_limit_ms: draftNumber("time_limit_ms", 2_000),
+      memory_limit_mb: draftNumber("memory_limit_mb", 256),
+      test_cases: Array.isArray(data.test_cases)
+        ? data.test_cases.map((testCase) => {
+          const item = testCase as Partial<TestCase>;
+          return {
+            input: typeof item.input === "string" ? item.input : "",
+            expected: typeof item.expected === "string" ? item.expected : "",
+            is_public: item.is_public === true,
+          };
+        })
+        : [{ input: "", expected: "", is_public: false }],
+    } as FormQuestion);
+    setActiveDraftId(draft.draft_id);
+    setEditingProblemId(draft.problem_id);
+    setStep(0);
+    setMode("single");
+    setError("");
+    setSuccess(`Draft loaded${draft.title ? `: ${draft.title}` : ""}.`);
   }
 
   function nextStep() {
@@ -179,6 +309,7 @@ export function AdminProblems() {
       setStep(0);
       setImportState(null);
       setImportFileName("");
+      await refreshManageData();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not add the questions.");
     } finally {
@@ -193,7 +324,58 @@ export function AdminProblems() {
       setStepErrors(validation.errors);
       return;
     }
-    await createQuestions(validation.questions);
+    await saveDraft(true, validation.questions[0]);
+  }
+
+  async function saveDraft(publish: boolean, validQuestion?: Question) {
+    setBusy(true);
+    setError("");
+    setSuccess("");
+    try {
+      const draftResult = await apiRequest<{ draft: ProblemDraft }>("/api/problems/drafts", {
+        method: "POST",
+        body: JSON.stringify({
+          ...(activeDraftId ? { draft_id: activeDraftId } : {}),
+          ...(editingProblemId ? { problem_id: editingProblemId } : {}),
+          draft_data: validQuestion ?? toQuestionPayload(form),
+        }),
+      });
+      setActiveDraftId(draftResult.draft.draft_id);
+      if (publish) {
+        await apiRequest<{ problem: Problem }>(`/api/problems/drafts/${draftResult.draft.draft_id}/publish`, {
+          method: "POST",
+        });
+        setSuccess(editingProblemId ? "Question changes published." : "Question published and available in the problem library.");
+        setForm(emptyForm);
+        setActiveDraftId(null);
+        setEditingProblemId(null);
+        setStep(0);
+      } else {
+        setSuccess("Draft saved. You can return to it from the draft list.");
+      }
+      await refreshManageData();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not save the question.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleArchive(problem: ManagedProblem) {
+    setBusy(true);
+    setError("");
+    try {
+      await apiRequest(`/api/problems/${encodeURIComponent(problem.slug)}/archive`, {
+        method: "PATCH",
+        body: JSON.stringify({ archived: problem.publicationStatus !== "archived" }),
+      });
+      await refreshManageData();
+      setSuccess(problem.publicationStatus === "archived" ? "Question published." : "Question archived.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not update publication status.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function loadJsonFile(event: ChangeEvent<HTMLInputElement>) {
@@ -269,6 +451,40 @@ export function AdminProblems() {
       {error && <p className="admin-form-message is-error" role="alert">{error}</p>}
       {success && <p className="admin-form-message is-success" role="status">{success}</p>}
 
+      {(managedProblems.length > 0 || drafts.length > 0) && (
+        <div className="admin-question-library-list">
+          <h3>Manage questions</h3>
+          {managedProblems.map((problem) => (
+            <div className="admin-question-library-row" key={problem.id}>
+              <span><strong>{problem.title}</strong><small>{problem.publicationStatus} · {problem.difficulty}</small></span>
+              <button type="button" disabled={busy} onClick={() => editProblem(problem)}>Edit</button>
+              <button type="button" disabled={busy} onClick={() => void toggleArchive(problem)}>
+                {problem.publicationStatus === "archived" ? "Publish" : "Archive"}
+              </button>
+            </div>
+          ))}
+          {drafts.map((draft) => (
+            <div className="admin-question-library-row" key={draft.draft_id}>
+              <span><strong>{draft.title || "Untitled draft"}</strong><small>Draft</small></span>
+              <button type="button" onClick={() => editDraft(draft)}>Continue editing</button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setBusy(true);
+                  void apiRequest(`/api/problems/drafts/${draft.draft_id}`, { method: "DELETE" })
+                    .then(refreshManageData)
+                    .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Could not delete draft."))
+                    .finally(() => setBusy(false));
+                }}
+              >
+                Delete draft
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {mode === "single" ? (
         <form className="admin-question-form" onSubmit={submitSingleQuestion}>
           <div className="admin-question-stepper" aria-label="Question details">
@@ -310,16 +526,53 @@ export function AdminProblems() {
                 <label>Sample input<textarea value={form.sample_input} onChange={(event) => updateForm("sample_input", event.target.value)} rows={3} maxLength={10000} /></label>
                 <label>Sample output<textarea value={form.sample_output} onChange={(event) => updateForm("sample_output", event.target.value)} rows={3} maxLength={10000} /></label>
               </div>
-              <label>Python 3 starter code <span className="admin-question-label-note">(optional)</span>
+              <div className="admin-question-field-row">
+                <label>Time limit (ms)<input type="number" min={100} max={30000} value={form.time_limit_ms} onChange={(event) => updateForm("time_limit_ms", Number(event.target.value))} required /></label>
+                <label>Memory limit (MB)<input type="number" min={16} max={1024} value={form.memory_limit_mb} onChange={(event) => updateForm("memory_limit_mb", Number(event.target.value))} required /></label>
+              </div>
+              <fieldset className="admin-question-language-list">
+                <legend>Supported Judge0 languages</legend>
+                <p>Leave all unchecked to enable every configured language.</p>
+                <div>
+                  {languages.map((language) => (
+                    <label key={language.id}>
+                      <input
+                        type="checkbox"
+                        checked={form.supported_languages.includes(language.id)}
+                        onChange={(event) => updateForm(
+                          "supported_languages",
+                          event.target.checked
+                            ? [...form.supported_languages, language.id]
+                            : form.supported_languages.filter((id) => id !== language.id),
+                        )}
+                      />
+                      {language.name} (ID {language.id})
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+              <label>Python starter code <span className="admin-question-label-note">(fallback for Python 3)</span>
                 <textarea className="admin-question-code-input" value={form.starter_code} onChange={(event) => updateForm("starter_code", event.target.value)} rows={6} maxLength={30000} spellCheck={false} />
               </label>
+              {languages.filter(({ id }) => form.supported_languages.includes(id)).map((language) => (
+                <label key={language.id}>{language.name} starter code <span className="admin-question-label-note">(optional)</span>
+                  <textarea
+                    className="admin-question-code-input"
+                    value={form.starter_codes[String(language.id)] ?? ""}
+                    onChange={(event) => updateForm("starter_codes", { ...form.starter_codes, [String(language.id)]: event.target.value })}
+                    rows={5}
+                    maxLength={30000}
+                    spellCheck={false}
+                  />
+                </label>
+              ))}
             </fieldset>
           )}
 
           {step === 2 && (
             <fieldset className="admin-question-step">
               <legend>Judge0 test cases</legend>
-              <p>Judge0 runs the submitted Python 3 program with each input and compares its stdout with the expected output. Add between 1 and 25 cases.</p>
+              <p>Judge0 runs the submitted program in the selected language with each input and compares its stdout with the expected output. Add between 1 and 25 cases.</p>
               {form.test_cases.map((testCase, index) => (
                 <div className="admin-question-test-case" key={index}>
                   <div className="admin-question-test-case-heading">
@@ -334,17 +587,21 @@ export function AdminProblems() {
                     <label>Input passed to Judge0<textarea value={testCase.input} onChange={(event) => updateTestCase(index, "input", event.target.value)} rows={3} maxLength={10000} spellCheck={false} required /></label>
                     <label>Expected stdout<textarea value={testCase.expected} onChange={(event) => updateTestCase(index, "expected", event.target.value)} rows={3} maxLength={10000} spellCheck={false} required /></label>
                   </div>
+                  <label className="admin-question-public-case">
+                    <input type="checkbox" checked={testCase.is_public} onChange={(event) => updateTestCase(index, "is_public", event.target.checked)} />
+                    This is a public example (input/output shown to learners)
+                  </label>
                 </div>
               ))}
               <button
                 className="admin-question-add-case"
                 type="button"
                 disabled={form.test_cases.length >= 25}
-                onClick={() => updateForm("test_cases", [...form.test_cases, { input: "", expected: "" }])}
+                onClick={() => updateForm("test_cases", [...form.test_cases, { input: "", expected: "", is_public: false }])}
               >
                 <Plus size={15} aria-hidden="true" /> Add test case
               </button>
-              <p className="admin-question-judge-note">Expected output is compared after trimming leading and trailing whitespace. Test case contents are kept private from learners.</p>
+              <p className="admin-question-judge-note">Only marked examples are shown publicly; all test inputs and expected output stay private from learners.</p>
             </fieldset>
           )}
 
@@ -365,7 +622,12 @@ export function AdminProblems() {
               <button className="admin-question-primary-button" type="button" onClick={nextStep}>Continue <ArrowRight size={15} aria-hidden="true" /></button>
             ) : (
               <button className="admin-question-primary-button" type="submit" disabled={busy}>
-                <BookPlus size={15} aria-hidden="true" /> {busy ? "Saving…" : "Add question"}
+                <BookPlus size={15} aria-hidden="true" /> {busy ? "Saving…" : editingProblemId ? "Publish changes" : "Publish question"}
+              </button>
+            )}
+            {step === 2 && (
+              <button className="admin-question-secondary-button" type="button" disabled={busy} onClick={() => void saveDraft(false)}>
+                {busy ? "Saving…" : "Save draft"}
               </button>
             )}
           </div>

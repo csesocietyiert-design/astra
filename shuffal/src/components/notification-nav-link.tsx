@@ -65,7 +65,7 @@ export function NotificationNavLink({ onClick }: NotificationNavLinkProps) {
         <Bell size={15} aria-hidden="true" />
         {unreadCount > 0 && <span className="notification-nav-dot" aria-hidden="true" />}
       </span>
-      <span>Notifications</span>
+      <span className="dashboard-nav-label dashboard-nav-label-notifications">Notifications</span>
       {unreadCount > 0 && <span className="notification-nav-count">{unreadCount > 99 ? "99+" : unreadCount}</span>}
     </Link>
   );

@@ -15,8 +15,13 @@ export type Problem = {
   constraints?: string;
   sampleInput?: string;
   sampleOutput?: string;
+  publicTestCases?: Array<{ input: string; expected: string }>;
   starterCode?: string;
   testCaseCount?: number;
+  supportedLanguages?: number[];
+  starterCodes?: Record<string, string>;
+  timeLimitMs?: number;
+  memoryLimitMb?: number;
 };
 
 export const problems: Problem[] = [
@@ -109,47 +114,4 @@ print(length_of_longest_substring(s))
     description: "Find the shortest transformation sequence between two words.",
     topic: "Graph",
   },
-];
-
-export const metrics = [
-  { label: "Published Problems", value: "248" },
-  { label: "Registered Members", value: "1,224" },
-  { label: "Accepted Submissions", value: "18.6K" },
-  { label: "Active Contests", value: "12" },
-];
-
-export const featuredProblems = problems.slice(0, 3);
-
-export const contests = [
-  {
-    title: "ASTRA Weekly Sprint",
-    date: "18 Oct 2026",
-    duration: "90 minutes",
-    status: "Upcoming",
-  },
-  {
-    title: "Dynamic Programming Duel",
-    date: "25 Oct 2026",
-    duration: "120 minutes",
-    status: "Upcoming",
-  },
-  {
-    title: "Graph Rush",
-    date: "05 Nov 2026",
-    duration: "75 minutes",
-    status: "Open",
-  },
-];
-
-export const leaderboard = [
-  { rank: 1, name: "Ananya Sharma", solved: 142, points: 9800, streak: 18 },
-  { rank: 2, name: "Rohit Verma", solved: 138, points: 9420, streak: 16 },
-  { rank: 3, name: "Mansi Singh", solved: 134, points: 9115, streak: 14 },
-  { rank: 4, name: "Aman Khare", solved: 128, points: 8890, streak: 12 },
-];
-
-export const submissions = [
-  { id: "SUB-2401", problem: "Two Sum", language: "Python", verdict: "Accepted", time: "2 ms", memory: "14 MB", date: "2h ago" },
-  { id: "SUB-2398", problem: "Median of Two Sorted Arrays", language: "C++", verdict: "Wrong Answer", time: "11 ms", memory: "18 MB", date: "Yesterday" },
-  { id: "SUB-2391", problem: "Valid Parentheses", language: "Java", verdict: "Accepted", time: "4 ms", memory: "16 MB", date: "3 days ago" },
 ];

@@ -141,13 +141,20 @@ export default function ProblemDetailPage() {
                 <h3>Output</h3>
                 <p>{problem.outputFormat ?? "Return the indices of the two numbers that add up to the target."}</p>
               </div>
-              {problem.sampleInput !== undefined && problem.sampleOutput !== undefined && (
-                <div className="problem-example-card">
-                  <h3>Example 1</h3>
-                  <p><strong>Input:</strong> <code>{problem.sampleInput}</code></p>
-                  <p><strong>Output:</strong> <code>{problem.sampleOutput}</code></p>
+              {[
+                ...(problem.sampleInput !== undefined && problem.sampleOutput !== undefined
+                  ? [{ input: problem.sampleInput, expected: problem.sampleOutput }]
+                  : []),
+                ...(problem.publicTestCases ?? []),
+              ].filter((example, index, examples) =>
+                examples.findIndex(({ input, expected }) => input === example.input && expected === example.expected) === index,
+              ).map((example, index) => (
+                <div className="problem-example-card" key={`${index}-${example.input}`}>
+                  <h3>Example {index + 1}</h3>
+                  <p><strong>Input:</strong> <code>{example.input}</code></p>
+                  <p><strong>Output:</strong> <code>{example.expected}</code></p>
                 </div>
-              )}
+              ))}
               <div className="problem-constraints-card">
                 <h3>Constraints</h3>
                 <p>{problem.constraints ?? "2 ≤ nums.length ≤ 10^4"}</p>
@@ -162,6 +169,8 @@ export default function ProblemDetailPage() {
             sampleInput={problem.sampleInput}
             sampleOutput={problem.sampleOutput}
             judgeable={Boolean(problem.testCaseCount)}
+            supportedLanguages={problem.supportedLanguages}
+            starterCodes={problem.starterCodes}
           />
         </div>
       </main>

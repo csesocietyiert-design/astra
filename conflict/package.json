@@ -6,6 +6,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
+    "test": "node --import tsx --test test/judge0Service.test.ts test/streak.test.ts test/submissions.test.ts test/contests.test.ts test/leaderboard.test.ts",
     "lint": "eslint --config eslint.config.mjs src --max-warnings=0"
   },
   "dependencies": {

@@ -26,6 +26,45 @@ function dateNumber(date: string): number {
   return value / dayMilliseconds;
 }
 
+export function calculateStreak(activityDates: string[], today: string) {
+  const uniqueDates = [...new Set(activityDates)].sort((left, right) => dateNumber(right) - dateNumber(left));
+  const todayNumber = dateNumber(today);
+  let currentStreak = 0;
+  let maxStreak = 0;
+  let runLength = 0;
+  let previousDateNumber: number | null = null;
+
+  for (const date of uniqueDates) {
+    const currentDateNumber = dateNumber(date);
+    runLength = previousDateNumber !== null && previousDateNumber - currentDateNumber === 1
+      ? runLength + 1
+      : 1;
+    maxStreak = Math.max(maxStreak, runLength);
+    previousDateNumber = currentDateNumber;
+  }
+
+  const latest = uniqueDates[0] ?? null;
+  if (latest && todayNumber - dateNumber(latest) >= 0 && todayNumber - dateNumber(latest) <= 1) {
+    let expectedDateNumber = dateNumber(latest);
+    for (const date of uniqueDates) {
+      const currentDateNumber = dateNumber(date);
+      if (currentDateNumber !== expectedDateNumber) break;
+      currentStreak += 1;
+      expectedDateNumber -= 1;
+    }
+  }
+
+  const yearAgo = todayNumber - 364;
+  return {
+    current_streak: currentStreak,
+    max_streak: maxStreak,
+    total_active_days: uniqueDates.length,
+    last_activity_date: latest,
+    today,
+    activity_dates: uniqueDates.filter((date) => dateNumber(date) >= yearAgo),
+  };
+}
+
 export async function getCurrentStreak(session: SessionClaims, today = activityDateFor()) {
   const pageSize = 500;
   let offset = 0;
@@ -52,39 +91,5 @@ export async function getCurrentStreak(session: SessionClaims, today = activityD
     offset += pageSize;
   }
 
-  const latest = allDates[0] ?? null;
-  const todayNumber = dateNumber(today);
-  let currentStreak = 0;
-  let maxStreak = 0;
-  let runLength = 0;
-  let previousDateNumber: number | null = null;
-
-  for (const date of allDates) {
-    const currentDateNumber = dateNumber(date);
-    runLength = previousDateNumber !== null && previousDateNumber - currentDateNumber === 1
-      ? runLength + 1
-      : 1;
-    maxStreak = Math.max(maxStreak, runLength);
-    previousDateNumber = currentDateNumber;
-  }
-
-  if (latest && todayNumber - dateNumber(latest) >= 0 && todayNumber - dateNumber(latest) <= 1) {
-    let expectedDateNumber = dateNumber(latest);
-    for (const date of allDates) {
-      const currentDateNumber = dateNumber(date);
-      if (currentDateNumber !== expectedDateNumber) break;
-      currentStreak += 1;
-      expectedDateNumber -= 1;
-    }
-  }
-
-  const yearAgo = todayNumber - 364;
-  return {
-    current_streak: currentStreak,
-    max_streak: maxStreak,
-    total_active_days: allDates.length,
-    last_activity_date: latest,
-    today,
-    activity_dates: allDates.filter((date) => dateNumber(date) >= yearAgo),
-  };
+  return calculateStreak(allDates, today);
 }

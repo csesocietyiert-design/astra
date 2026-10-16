@@ -29,6 +29,7 @@ export function DashboardTopbar({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [streak, setStreak] = useState<number | null>(null);
   const [streakError, setStreakError] = useState(false);
+  const [clockNow, setClockNow] = useState<Date | null>(null);
   const closeMobileMenu = () => setMobileMenuOpen(false);
   const hasAccount = name !== undefined && accountType !== undefined && onSignOut !== undefined;
   const account = name !== undefined && accountType !== undefined && onSignOut
@@ -40,6 +41,13 @@ export function DashboardTopbar({
     updateScrollState();
     window.addEventListener("scroll", updateScrollState, { passive: true });
     return () => window.removeEventListener("scroll", updateScrollState);
+  }, []);
+
+  useEffect(() => {
+    const updateClock = () => setClockNow(new Date());
+    updateClock();
+    const intervalId = window.setInterval(updateClock, 1000);
+    return () => window.clearInterval(intervalId);
   }, []);
 
   useEffect(() => {
@@ -58,12 +66,22 @@ export function DashboardTopbar({
       }
     }
 
+    function handleStreakUpdated(event: Event) {
+      const updatedStreak = event instanceof CustomEvent ? event.detail : undefined;
+      if (typeof updatedStreak === "number" && Number.isInteger(updatedStreak) && updatedStreak >= 0) {
+        setStreak(updatedStreak);
+        setStreakError(false);
+        return;
+      }
+      void refreshStreak();
+    }
+
     void refreshStreak();
-    window.addEventListener("astra:streak-updated", refreshStreak);
+    window.addEventListener("astra:streak-updated", handleStreakUpdated);
 
     return () => {
       active = false;
-      window.removeEventListener("astra:streak-updated", refreshStreak);
+      window.removeEventListener("astra:streak-updated", handleStreakUpdated);
     };
   }, [hasAccount]);
 
@@ -88,15 +106,26 @@ export function DashboardTopbar({
         id="dashboard-navigation"
         aria-label="Main navigation"
       >
-        <Link href="/dashboard" aria-current={activeHome || pathname === "/dashboard" ? "page" : undefined} onClick={closeMobileMenu}><House size={15} aria-hidden="true" />Home</Link>
-        <Link href="/problems" aria-current={pathname.startsWith("/problems") ? "page" : undefined} onClick={closeMobileMenu}><CircleHelp size={15} aria-hidden="true" />Questions</Link>
-        <Link href="/profile" aria-current={pathname === "/profile" ? "page" : undefined} onClick={closeMobileMenu}><ChartNoAxesCombined size={15} aria-hidden="true" />Progress</Link>
-        <Link href="/dpp" aria-current={pathname === "/dpp" ? "page" : undefined} onClick={closeMobileMenu}><CalendarCheck size={15} aria-hidden="true" />DPP</Link>
-        <Link href="/quiz" aria-current={pathname === "/quiz" ? "page" : undefined} onClick={closeMobileMenu}><Brain size={15} aria-hidden="true" />Quiz</Link>
+        <Link href="/dashboard" aria-label="Home" title="Home" aria-current={activeHome || pathname === "/dashboard" ? "page" : undefined} onClick={closeMobileMenu}><House size={15} aria-hidden="true" /><span className="dashboard-nav-label dashboard-nav-label-home">Home</span></Link>
+        <Link href="/problems" aria-label="Questions" title="Questions" aria-current={pathname.startsWith("/problems") ? "page" : undefined} onClick={closeMobileMenu}><CircleHelp size={15} aria-hidden="true" /><span className="dashboard-nav-label dashboard-nav-label-questions">Questions</span></Link>
+        <Link href="/profile" aria-label="Progress" title="Progress" aria-current={pathname === "/profile" ? "page" : undefined} onClick={closeMobileMenu}><ChartNoAxesCombined size={15} aria-hidden="true" /><span className="dashboard-nav-label dashboard-nav-label-progress">Progress</span></Link>
+        <Link href="/dpp" aria-label="DPP" title="DPP" aria-current={pathname === "/dpp" ? "page" : undefined} onClick={closeMobileMenu}><CalendarCheck size={15} aria-hidden="true" /><span className="dashboard-nav-label dashboard-nav-label-dpp">DPP</span></Link>
+        <Link href="/quiz" aria-label="Quiz" title="Quiz" aria-current={pathname === "/quiz" ? "page" : undefined} onClick={closeMobileMenu}><Brain size={15} aria-hidden="true" /><span className="dashboard-nav-label dashboard-nav-label-quiz">Quiz</span></Link>
         <NotificationNavLink onClick={closeMobileMenu} />
         <AdminNavLink onClick={closeMobileMenu} />
-        <a href="mailto:csesociety.iert@gmail.com?subject=ASTRA%20Doubt%20and%20Support" onClick={closeMobileMenu}><Headset size={15} aria-hidden="true" />Doubt and support</a>
+        <Link href="/support" aria-label="Doubt and support" title="Doubt and support" aria-current={pathname === "/support" ? "page" : undefined} onClick={closeMobileMenu}><Headset size={15} aria-hidden="true" /><span className="dashboard-nav-label dashboard-nav-label-support">Doubt and support</span></Link>
       </nav>
+      <time
+        className="dashboard-live-clock"
+        dateTime={clockNow?.toISOString()}
+        aria-label={clockNow
+          ? clockNow.toLocaleString("en-GB", { dateStyle: "long", timeStyle: "medium" })
+          : "Current date and time"}
+      >
+        {clockNow
+          ? `${clockNow.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })} | ${clockNow.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" })}`
+        : ""}
+      </time>
       {account ? (
         <div className="dashboard-account">
           <span

@@ -51,10 +51,10 @@ credentialed requests only from the exact `FRONTEND_ORIGIN` and checks the
 ## 4. Configure Supabase and optional services
 
 1. Apply all SQL migrations in `supabase/migrations/` to the Supabase project.
-   The latest migrations create accepted-activity, submission-history, and
-   notification tables and support persistent profiles for guest logins
-   without a Society ID, plus the persistent problem library and private
-   Judge0 test cases; apply them before deploying the API.
+   The latest migrations create accepted-activity, submission-history,
+   notification, and contest registration tables and support persistent
+   profiles for guest logins without a Society ID, plus the persistent problem
+   library and private Judge0 test cases; apply them before deploying the API.
 2. Set the `MEMBER_*` variables in Render to match the existing member
    credential and profile tables. Check `conflict/.env.example` for names and
    defaults; the member password hashes must be bcrypt hashes.

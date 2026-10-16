@@ -10,6 +10,8 @@ import { profileRouter } from "./routes/profile.js";
 import { streakRouter } from "./routes/streak.js";
 import { notificationRouter } from "./routes/notifications.js";
 import { problemRouter } from "./routes/problems.js";
+import { contestRouter } from "./routes/contests.js";
+import { leaderboardRouter } from "./routes/leaderboard.js";
 
 export const app = express();
 
@@ -33,5 +35,7 @@ app.use("/api/judge", judgeRouter);
 app.use("/api/problems", problemRouter);
 app.use("/api/streak", streakRouter);
 app.use("/api/notifications", notificationRouter);
+app.use("/api/contests", contestRouter);
+app.use("/api/leaderboard", leaderboardRouter);
 app.use("/api/health", healthRouter);
 app.use(errorHandler);

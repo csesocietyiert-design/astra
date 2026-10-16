@@ -33,11 +33,13 @@ export function AdminNavLink({ onClick }: AdminNavLinkProps) {
   return (
     <Link
       href="/admin"
+      className="dashboard-admin-nav-link"
       aria-current={pathname === "/admin" ? "page" : undefined}
+      aria-label="Create questions"
+      title="Create questions"
       onClick={onClick}
     >
       <ShieldCheck size={15} aria-hidden="true" />
-      Create questions
     </Link>
   );
 }

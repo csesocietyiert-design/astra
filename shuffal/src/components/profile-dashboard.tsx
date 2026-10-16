@@ -5,7 +5,8 @@ import { useCallback, useEffect, useState } from "react";
 import { ArrowUpRight, CheckCircle2, Code2, History, Medal, Trophy, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { apiRequest } from "@/lib/api";
-import { contests, featuredProblems, leaderboard, submissions } from "@/lib/data";
+import { problems as builtInProblems, type Problem } from "@/lib/data";
+import type { Contest, DashboardSubmission, LeaderboardEntry } from "@/lib/competition";
 import { DashboardTopbar } from "@/components/dashboard-topbar";
 
 const dailyHeadlines = [
@@ -123,6 +124,18 @@ function getDailyHeadline() {
   return dailyHeadlines[dayNumber % dailyHeadlines.length];
 }
 
+function contestDate(value: string) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "Date unavailable";
+  return new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(date);
+}
+
+function submittedDate(value: string) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "Date unavailable";
+  return new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(date);
+}
+
 type UserProfile = {
   id: string;
   account_type: "member" | "outsider";
@@ -137,6 +150,14 @@ type UserProfile = {
 export function ProfileDashboard() {
   const router = useRouter();
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [featuredProblems, setFeaturedProblems] = useState<Problem[]>([]);
+  const [contests, setContests] = useState<Contest[]>([]);
+  const [recentSubmissions, setRecentSubmissions] = useState<DashboardSubmission[]>([]);
+  const [submissionCount, setSubmissionCount] = useState<number | null>(null);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [leaderboardCount, setLeaderboardCount] = useState<number | null>(null);
+  const [overviewLoading, setOverviewLoading] = useState(true);
+  const [overviewError, setOverviewError] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -178,6 +199,64 @@ export function ProfileDashboard() {
       })
       .finally(() => setLoading(false));
   }, [refreshProfile, router]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadDashboardData() {
+      const [problemResult, contestResult, statsResult, leaderboardResult] = await Promise.allSettled([
+        apiRequest<{ problems: Problem[] }>("/api/problems"),
+        apiRequest<{ contests: Contest[] }>("/api/contests"),
+        apiRequest<{
+          total_attempts: number;
+          recent_submissions: DashboardSubmission[];
+        }>("/api/profile/stats"),
+        apiRequest<{ entries: LeaderboardEntry[]; total_entries: number }>("/api/leaderboard"),
+      ]);
+      if (!active) return;
+
+      const errors: string[] = [];
+      if (problemResult.status === "fulfilled") {
+        const storedProblems = problemResult.value.problems;
+        const storedSlugs = new Set(storedProblems.map(({ slug }) => slug));
+        setFeaturedProblems([
+          ...storedProblems,
+          ...builtInProblems.filter(({ slug }) => !storedSlugs.has(slug)),
+        ].slice(0, 3));
+      } else {
+        setFeaturedProblems(builtInProblems.slice(0, 3));
+        errors.push("Problem list");
+      }
+
+      if (contestResult.status === "fulfilled") {
+        setContests(contestResult.value.contests);
+      } else {
+        errors.push("contests");
+      }
+
+      if (statsResult.status === "fulfilled") {
+        setSubmissionCount(statsResult.value.total_attempts);
+        setRecentSubmissions(statsResult.value.recent_submissions);
+      } else {
+        errors.push("submission history");
+      }
+
+      if (leaderboardResult.status === "fulfilled") {
+        setLeaderboard(leaderboardResult.value.entries);
+        setLeaderboardCount(leaderboardResult.value.total_entries);
+      } else {
+        errors.push("leaderboard");
+      }
+
+      setOverviewError(errors.length ? `Could not load ${errors.join(", ")}.` : "");
+      setOverviewLoading(false);
+    }
+
+    void loadDashboardData();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   async function signOut() {
     setError("");
@@ -252,7 +331,7 @@ export function ProfileDashboard() {
             <span className="dashboard-editor-tab"><Code2 size={13} /> solution.py <i /></span>
             <span className="dashboard-editor-ready">SAVED</span>
             <Link href="/submissions" className="dashboard-submit-button">Submit</Link>
-            <Link href={`/problems/${featuredProblems[0].slug}`} className="dashboard-run-button">
+            <Link href={`/problems/${featuredProblems[0]?.slug ?? "two-sum"}`} className="dashboard-run-button">
               <Code2 size={14} /> Run Code
             </Link>
           </div>
@@ -312,23 +391,24 @@ export function ProfileDashboard() {
           </div>
 
           <div className="dashboard-stat-grid">
-            <article className="dashboard-stat-card">
+            <Link href="/problems" className="dashboard-stat-card">
               <span className="dashboard-stat-icon"><Code2 size={17} /></span>
-              <div><strong>{featuredProblems.length}</strong><span>Featured problems</span></div>
-            </article>
-            <article className="dashboard-stat-card">
+              <div><strong>{overviewLoading ? "…" : featuredProblems.length}</strong><span>Featured problems</span></div>
+            </Link>
+            <Link href="/contests" className="dashboard-stat-card">
               <span className="dashboard-stat-icon"><Trophy size={17} /></span>
-              <div><strong>{contests.length}</strong><span>Contest listings</span></div>
-            </article>
-            <article className="dashboard-stat-card">
+              <div><strong>{overviewLoading ? "…" : contests.length}</strong><span>Contest listings</span></div>
+            </Link>
+            <Link href="/submissions" className="dashboard-stat-card">
               <span className="dashboard-stat-icon"><History size={17} /></span>
-              <div><strong>{submissions.length}</strong><span>Recent sample submissions</span></div>
-            </article>
-            <article className="dashboard-stat-card">
+              <div><strong>{overviewLoading ? "…" : submissionCount ?? 0}</strong><span>Your submissions</span></div>
+            </Link>
+            <Link href="/leaderboard" className="dashboard-stat-card">
               <span className="dashboard-stat-icon"><Medal size={17} /></span>
-              <div><strong>{leaderboard.length}</strong><span>Leaderboard entries</span></div>
-            </article>
+              <div><strong>{overviewLoading ? "…" : leaderboardCount ?? 0}</strong><span>Ranked solvers</span></div>
+            </Link>
           </div>
+          {overviewError && <p className="dashboard-message error" role="status">{overviewError}</p>}
 
           <div className="dashboard-content-grid">
             <section className="dashboard-content-card" aria-labelledby="featured-heading">
@@ -346,6 +426,9 @@ export function ProfileDashboard() {
                     <span className={`dashboard-difficulty ${problem.difficulty.toLowerCase()}`}>{problem.difficulty}</span>
                   </Link>
                 ))}
+                {!overviewLoading && featuredProblems.length === 0 && (
+                  <p className="dashboard-data-empty">No published problems yet.</p>
+                )}
               </div>
             </section>
 
@@ -358,15 +441,69 @@ export function ProfileDashboard() {
                 <Link href="/contests" aria-label="View all contests"><ArrowUpRight size={17} /></Link>
               </div>
               <div className="dashboard-contest-list">
-                {contests.slice(0, 2).map((contest) => (
-                  <div key={contest.title} className="dashboard-contest-row">
+                {contests.filter(({ status }) => status !== "Ended").slice(0, 2).map((contest) => (
+                  <Link key={contest.id} href="/contests" className="dashboard-contest-row">
                     <span className="dashboard-contest-mark"><Trophy size={15} /></span>
-                    <span><strong>{contest.title}</strong><small>{contest.date} · {contest.duration}</small></span>
+                    <span><strong>{contest.title}</strong><small>{contestDate(contest.starts_at)} · {contest.duration_minutes} minutes · {contest.registration_count} registered</small></span>
                     <span className="dashboard-contest-status">{contest.status}</span>
-                  </div>
+                  </Link>
                 ))}
+                {!overviewLoading && contests.filter(({ status }) => status !== "Ended").length === 0 && (
+                  <p className="dashboard-data-empty">No upcoming contests.</p>
+                )}
               </div>
               <Link href="/contests" className="dashboard-subtle-link">Explore all contests <ArrowUpRight size={14} /></Link>
+            </section>
+          </div>
+
+          <div className="dashboard-content-grid">
+            <section className="dashboard-content-card" aria-labelledby="recent-submissions-heading">
+              <div className="dashboard-card-heading">
+                <div>
+                  <p className="dashboard-eyebrow">YOUR ACTIVITY</p>
+                  <h3 id="recent-submissions-heading">Recent submissions</h3>
+                </div>
+                <Link href="/submissions" aria-label="View submission history"><ArrowUpRight size={17} /></Link>
+              </div>
+              <div className="dashboard-problem-list">
+                {recentSubmissions.slice(0, 3).map((submission) => (
+                  <Link key={submission.id} href={`/problems/${submission.problem_slug}`} className="dashboard-problem-row">
+                    <span>
+                      <strong>{submission.problem_title}</strong>
+                      <small>{submission.language} · {submittedDate(submission.created_at)}</small>
+                    </span>
+                    <span className={`dashboard-difficulty${submission.verdict === "Accepted" ? " easy" : ""}`}>
+                      {submission.verdict}
+                    </span>
+                  </Link>
+                ))}
+                {!overviewLoading && recentSubmissions.length === 0 && (
+                  <p className="dashboard-data-empty">No submissions yet. Choose a problem to get started.</p>
+                )}
+              </div>
+              <Link href="/submissions" className="dashboard-subtle-link">View submission history <ArrowUpRight size={14} /></Link>
+            </section>
+
+            <section className="dashboard-content-card" aria-labelledby="leaderboard-preview-heading">
+              <div className="dashboard-card-heading">
+                <div>
+                  <p className="dashboard-eyebrow">SOCIETY RANKINGS</p>
+                  <h3 id="leaderboard-preview-heading">Leaderboard</h3>
+                </div>
+                <Link href="/leaderboard" aria-label="View full leaderboard"><ArrowUpRight size={17} /></Link>
+              </div>
+              <div className="dashboard-problem-list">
+                {leaderboard.slice(0, 3).map((entry) => (
+                  <Link key={`${entry.rank}-${entry.name}`} href="/leaderboard" className="dashboard-problem-row">
+                    <span><strong>#{entry.rank} · {entry.name}</strong><small>{entry.solved} solved</small></span>
+                    <span className="dashboard-contest-status">{entry.points} pts</span>
+                  </Link>
+                ))}
+                {!overviewLoading && leaderboard.length === 0 && (
+                  <p className="dashboard-data-empty">Accepted solutions will appear here.</p>
+                )}
+              </div>
+              <Link href="/leaderboard" className="dashboard-subtle-link">View full leaderboard <ArrowUpRight size={14} /></Link>
             </section>
           </div>
         </section>

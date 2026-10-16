@@ -39,8 +39,14 @@ type ActivitySummary = {
   today: string;
   activity_dates: string[];
   total_solved: number;
+  total_attempts: number;
+  attempted_questions: number;
+  question_success_rate: number;
+  verdict_counts: Record<string, number>;
+  difficulty_attempted: Record<"Easy" | "Medium" | "Hard", number>;
   difficulty_solved: Record<"Easy" | "Medium" | "Hard", number>;
   skill_tags: { tag: string; count: number }[];
+  focus_areas: { tag: string; questions: number }[];
   recent_submissions: {
     id: string;
     problem_slug: string;
@@ -49,6 +55,7 @@ type ActivitySummary = {
     language: string;
     verdict: string;
     failed_test_case: number | null;
+    time_taken_seconds: number | null;
     created_at: string;
   }[];
 };
@@ -329,7 +336,9 @@ export function ProfilePage() {
                       <strong>{activity ? activity.difficulty_solved[difficulty as "Easy" | "Medium" | "Hard"] : activityError ? "!" : "…"}</strong>
                     </span>
                     <b>{difficulty}</b>
-                    <small>{activity ? `${activity.difficulty_solved[difficulty as "Easy" | "Medium" | "Hard"]} solved` : activityError ? "Unavailable" : "Loading"}</small>
+                    <small>{activity
+                      ? `${activity.difficulty_solved[difficulty as "Easy" | "Medium" | "Hard"]} of ${activity.difficulty_attempted[difficulty as "Easy" | "Medium" | "Hard"]} attempted`
+                      : activityError ? "Unavailable" : "Loading"}</small>
                   </div>
                 ))}
               </div>
@@ -421,6 +430,49 @@ export function ProfilePage() {
               </article>
             </div>
 
+            <section className="profile-attempt-analysis" aria-labelledby="profile-attempt-analysis-title">
+              <div className="profile-attempt-analysis-heading">
+                <div>
+                  <h3 id="profile-attempt-analysis-title">Attempt analysis</h3>
+                  <p>Insights from your judged submissions and distinct questions attempted.</p>
+                </div>
+                <Link href="/problems">Practice questions</Link>
+              </div>
+              {activity ? (
+                <>
+                  <div className="profile-attempt-metrics">
+                    <div><strong>{activity.total_attempts}</strong><span>SUBMISSIONS</span></div>
+                    <div><strong>{activity.attempted_questions}</strong><span>QUESTIONS ATTEMPTED</span></div>
+                    <div><strong>{activity.question_success_rate}%</strong><span>QUESTIONS SOLVED</span></div>
+                  </div>
+                  <p className="profile-attempt-insight">
+                    {activity.total_attempts === 0
+                      ? "Submit a solution to start building your performance overview."
+                      : activity.focus_areas.length
+                        ? `Review ${activity.focus_areas[0].tag}: ${activity.focus_areas[0].questions} attempted question${activity.focus_areas[0].questions === 1 ? "" : "s"} in this area ${activity.focus_areas[0].questions === 1 ? "is" : "are"} not accepted yet.`
+                        : "All of your attempted questions have an accepted solution. Try a new difficulty or topic to keep progressing."}
+                  </p>
+                  <div className="profile-verdict-breakdown" aria-label="Submission verdict breakdown">
+                    {Object.entries(activity.verdict_counts).map(([verdict, count]) => (
+                      <span key={verdict} className={verdict === "Accepted" ? "is-accepted" : ""}>
+                        {verdict}: <strong>{count}</strong>
+                      </span>
+                    ))}
+                  </div>
+                  {activity.focus_areas.length > 1 && (
+                    <div className="profile-focus-areas">
+                      <span>More topics to revisit</span>
+                      {activity.focus_areas.slice(1, 4).map(({ tag, questions }) => (
+                        <span key={tag}>{tag} · {questions}</span>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="profile-attempt-insight">{activityError || "Loading attempt analysis…"}</p>
+              )}
+            </section>
+
             <section className="profile-activity-card">
               <div className="profile-activity-heading">
                 <div>
@@ -482,7 +534,12 @@ export function ProfilePage() {
                       </span>
                       <Link href={`/problems/${submission.problem_slug}`}>{submission.problem_title}</Link>
                       <span>{submission.language}</span>
-                      <time dateTime={submission.created_at}>{submissionTime(submission.created_at)}</time>
+                      <div>
+                        <time dateTime={submission.created_at}>{submissionTime(submission.created_at)}</time>
+                        {submission.time_taken_seconds !== null && (
+                          <small>Session: {submission.time_taken_seconds}s</small>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
