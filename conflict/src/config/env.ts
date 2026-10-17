@@ -14,7 +14,10 @@ const bucketName = z.string().regex(/^[a-z0-9][a-z0-9._-]*$/);
 
 const envSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(4000),
-  FRONTEND_ORIGIN: z.string().url().default("http://localhost:3000"),
+  FRONTEND_ORIGIN: z.string()
+    .default("http://localhost:3000")
+    .transform((value) => value.split(",").map((origin) => origin.trim()).filter(Boolean))
+    .pipe(z.array(z.string().url()).min(1)),
   SUPABASE_URL: optionalUrl,
   SUPABASE_SERVICE_ROLE_KEY: optionalSecret,
   TURNSTILE_SECRET_KEY: optionalSecret,

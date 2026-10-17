@@ -4106,6 +4106,91 @@ body {
   background: #dcdce0;
 }
 
+.auth-or-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0 14px;
+  color: #85858d;
+  font-size: 12px;
+}
+
+.auth-or-divider::before,
+.auth-or-divider::after {
+  height: 1px;
+  flex: 1;
+  background: #29292e;
+  content: "";
+}
+
+.auth-google-submit {
+  width: 100%;
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1px solid #414148;
+  border-radius: 999px;
+  background: transparent;
+  color: #f1f1f3;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.auth-google-submit:hover:not(:disabled) {
+  border-color: #707078;
+  background: #1b1b20;
+}
+
+.auth-google-submit:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.google-callback-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #0b0b0d;
+  color: #f1f1f3;
+}
+
+.google-callback-card {
+  width: min(100%, 420px);
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  padding: 36px;
+  border: 1px solid #29292e;
+  border-radius: 18px;
+  background: #111114;
+  text-align: center;
+}
+
+.google-callback-card h1,
+.google-callback-card p {
+  margin: 0;
+}
+
+.google-callback-card h1 {
+  font-size: 22px;
+}
+
+.google-callback-card p,
+.google-callback-card a {
+  color: #a1a1a7;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.google-callback-card a {
+  color: #f1f1f3;
+}
+
 .auth-login-card .auth-form-bottom,
 .auth-experience-form .register-card .auth-form-bottom {
   justify-content: center;

@@ -46,6 +46,10 @@ const registerSchema = z.object({
   password: z.string().min(8).max(128),
 });
 
+const googleLoginSchema = z.object({
+  access_token: z.string().min(1).max(8192),
+});
+
 function safeOutsider(row: Record<string, unknown>) {
   const {
     password_hash: _passwordHash,
@@ -200,6 +204,109 @@ authRouter.post("/login", loginLimiter, async (request, response, next) => {
         profile_complete: 100,
       },
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+authRouter.post("/google", loginLimiter, async (request, response, next) => {
+  const parsed = googleLoginSchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ error: "A valid Google sign-in is required." });
+    return;
+  }
+
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase.auth.getUser(parsed.data.access_token);
+    if (error) {
+      response.status(401).json({ error: "Google sign-in could not be verified. Please try again." });
+      return;
+    }
+
+    const googleUser = data.user;
+    const isGoogleAccount = googleUser.app_metadata.provider === "google"
+      || (Array.isArray(googleUser.app_metadata.providers)
+        && googleUser.app_metadata.providers.includes("google"));
+    if (!isGoogleAccount || !googleUser.email || !googleUser.email_confirmed_at) {
+      response.status(401).json({ error: "Use a verified Google account to sign in." });
+      return;
+    }
+
+    const email = googleUser.email.toLowerCase();
+    const { data: member, error: memberError } = await supabase
+      .from(env.MEMBER_USER_TABLE)
+      .select("*")
+      .eq(env.MEMBER_LOGIN_EMAIL_COLUMN, email)
+      .maybeSingle();
+    if (memberError) throw memberError;
+
+    if (member) {
+      const userId = member[env.MEMBER_USER_PK_COLUMN];
+      if (typeof userId !== "string" && typeof userId !== "number") {
+        throw new Error(`Member credential table is missing its configured ${env.MEMBER_USER_PK_COLUMN} column.`);
+      }
+
+      const societyIdValue = member[env.MEMBER_LOGIN_ID_COLUMN];
+      const societyId = societyIdValue === null || societyIdValue === undefined
+        ? ""
+        : String(societyIdValue).trim();
+      if (!societyId) {
+        const { data: profile, error: profileError } = await supabase
+          .from(env.MEMBER_PROFILE_TABLE)
+          .select("*")
+          .eq(env.MEMBER_PROFILE_EMAIL_COLUMN, email)
+          .maybeSingle();
+        if (profileError) throw profileError;
+        const guestProfile = await getOrCreateLinkedGuestProfile(
+          member as Record<string, unknown>,
+          (profile ?? {}) as Record<string, unknown>,
+        );
+        await setSessionCookie(response, {
+          userId: String(guestProfile.id),
+          accountType: "outsider",
+        });
+        response.json({ user: safeOutsider(guestProfile) });
+        return;
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from(env.MEMBER_PROFILE_TABLE)
+        .select("*")
+        .eq(env.MEMBER_PROFILE_ID_COLUMN, societyId)
+        .maybeSingle();
+      if (profileError) throw profileError;
+      if (!profile) {
+        response.status(403).json({ error: "No complete ASTRA member profile is linked to this Google email." });
+        return;
+      }
+
+      await setSessionCookie(response, {
+        userId: String(userId),
+        accountType: "member",
+        societyId,
+      });
+      response.json({
+        user: {
+          ...safeMember(profile as Record<string, unknown>),
+          account_type: "member",
+          profile_complete: 100,
+        },
+      });
+      return;
+    }
+
+    const outsider = await findOutsiderByEmail(email);
+    if (!outsider) {
+      response.status(403).json({ error: "No ASTRA account is registered with this Google email. Create an account first." });
+      return;
+    }
+
+    await setSessionCookie(response, {
+      userId: String(outsider.id),
+      accountType: "outsider",
+    });
+    response.json({ user: safeOutsider(outsider) });
   } catch (error) {
     next(error);
   }

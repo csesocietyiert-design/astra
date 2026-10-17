@@ -2,11 +2,11 @@
 
 ASTRA uses Vercel for the Next.js frontend, Render for the API, and Supabase
 for authentication data and profile-photo storage. Deploy both services from
-the `main` branch of `csesociety-iert/astra-iert`.
+the `main` branch of `csesocietyiert-design/astra`.
 
 ## 1. Deploy the frontend to Vercel
 
-1. Import the GitHub repository into Vercel.
+1. Import `https://github.com/csesocietyiert-design/astra` into Vercel.
 2. Set the project root directory to `shuffal`.
 3. Keep the detected Next.js framework, install command, and build command.
 4. After completing the backend deployment below, add the Vercel environment
@@ -17,15 +17,20 @@ adding the API URL so the rewrite is included in the production build.
 
 ## 2. Deploy the API to Render
 
-1. In Render, create a Blueprint from the GitHub repository. Render reads
+1. In Render, create a Blueprint from the GitHub repository
+   `csesocietyiert-design/astra`. Render reads
    `render.yaml` and creates the `astra-api` web service.
    The API build command installs development dependencies for TypeScript
    compilation and builds only the `conflict` workspace. If creating a Web
    Service manually, use `npm ci --include=dev && npm run build --workspace
    conflict` as the build command and `npm run start` as the start command;
    do not use the root `npm run build`, which also builds the frontend.
-2. Set `FRONTEND_ORIGIN` to the exact deployed Vercel origin, including
-   `https://` and no trailing slash (for example, `https://astra-iert.vercel.app`).
+2. Set `FRONTEND_ORIGIN` to the allowed frontend origins, separated by commas
+   and without trailing slashes. Include every active production domain, for
+   example `https://astra.iert.ac.in,https://astra-iert.vercel.app`. If the
+   currently deployed API predates comma-separated origins, first set only
+   `https://astra.iert.ac.in` to restore the service, deploy the updated API,
+   then add the Vercel origin if it is still needed.
 3. Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` using the Supabase
    project URL and service-role key. Keep the service-role key only in Render.
 4. Render generates `ASTRA_SESSION_SECRET` for the service.
@@ -45,8 +50,9 @@ Redeploy the frontend after setting it.
 In production, the frontend sends API requests to its own `/api` paths, and
 Vercel rewrites those paths to Render. This keeps session cookies first-party
 even though the services have different provider URLs. The API allows
-credentialed requests only from the exact `FRONTEND_ORIGIN` and checks the
-`Origin` of state-changing requests.
+credentialed requests only from origins in `FRONTEND_ORIGIN` and checks the
+`Origin` of state-changing requests. The deployed custom domain must be in
+this list as well as the Vercel domain if both are used.
 
 ## 4. Configure Supabase and optional services
 

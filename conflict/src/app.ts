@@ -15,12 +15,29 @@ import { leaderboardRouter } from "./routes/leaderboard.js";
 
 export const app = express();
 
+function isAllowedFrontendOrigin(origin: string | undefined) {
+  if (!origin) return false;
+  if (env.FRONTEND_ORIGIN.includes(origin)) return true;
+  if (process.env.NODE_ENV === "production") return false;
+
+  try {
+    const parsed = new URL(origin);
+    return parsed.protocol === "http:"
+      && ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
 app.disable("x-powered-by");
-app.use(cors({ origin: env.FRONTEND_ORIGIN, credentials: true }));
+app.use(cors({
+  origin: (origin, callback) => callback(null, isAllowedFrontendOrigin(origin)),
+  credentials: true,
+}));
 app.use((request, response, next) => {
   if (["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) {
     const origin = request.get("origin");
-    if (origin !== env.FRONTEND_ORIGIN) {
+    if (!isAllowedFrontendOrigin(origin)) {
       response.status(403).json({ error: "Request origin is not allowed." });
       return;
     }
